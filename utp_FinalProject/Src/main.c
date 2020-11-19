@@ -66,21 +66,24 @@ static void MX_TIM2_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-float humidityReading = 0;
-float temperatureReading = 0;
 int16_t acceleroReading[3] = {0,0,0};
-int16_t acceleroReading_PRE[3] = {0,0,0};
-
-int8_t calibrated = 0;
 int16_t Sample_X;
 int16_t Sample_Y;
 int16_t Sample_Z;
 
+int8_t calibrated = 0;
 int16_t sstatex;
 int16_t sstatey;
 int16_t sstatez;
 
+int16_t accelerationx_f[2] = {0,0};
+int16_t accelerationy_f[2] = {0,0};
+int16_t accelerationz_f[2] = {0,0};
 
+int16_t velocityx[2] = {0,0};
+
+float humidityReading = 0;
+float temperatureReading = 0;
 float gyroscopeReading[3] = {0,0,0};
 
 char humidityStr[20];
@@ -169,15 +172,14 @@ int main(void)
 	  //HAL_UART_Transmit(&huart1, (uint8_t*)gyroscopeStr, sizeof(gyroscopeStr), 100);
 
 		 */
-		if(((uint8_t)acceleroReading[1]-10)>3){
-			integral_y += ((uint8_t)acceleroReading[1]-acc_y_ref);
+
+		if(((uint8_t)accelerationx_f-10)>3){
+			integral_y += ((uint8_t)accelerationx_f-acc_y_ref);
 		}
 
 		num_pushups = integral_y/80;
 
 		HAL_Delay(200);
-
-
 	}
 	/* USER CODE END 3 */
 }
@@ -389,23 +391,57 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim2) {
 	readAccelerometer();
 }
 
+void getXYZ() {
+	BSP_ACCELERO_AccGetXYZ(acceleroReading);
+	Sample_X = (int)acceleroReading[0];
+	Sample_Y = (int)acceleroReading[1];
+	Sample_Z = (int)acceleroReading[2];
+}
+
+void Calibrate() {
+	int8_t count1 = 0;
+
+	do {
+		getXYZ();
+		sstatex = sstatex + Sample_X; // Accumulate Samples
+		sstatey = sstatey + Sample_Y;
+		sstatez = sstatez + Sample_Z;
+		count1++;
+	} while (count1 != 0x0400); // 1024 times
+
+	sstatex = sstatex>>10; // division between 1024
+	sstatey = sstatey>>10;
+	sstatez = sstatez>>10;
+
+	calibrated = 1;
+}
+
 void readAccelerometer() {
-	//read
-	BSP_ACCELERO_AccGetXYZ(acceleration);
-	//for UART transmit
-	sprintf(AxBuff, "Acc X is:%d ", (int) acceleration[0]);
-	sprintf(AyBuff, "Acc Y is:%d ", (int) acceleration[1]);
-	sprintf(AzBuff, "Acc Z is:%d  ", (int) acceleration[2]);
-	memset(buffer, 0, strlen(buffer));
-	strcat(buffer, AxBuff);
-	strcat(buffer, AyBuff);
-	strcat(buffer, AzBuff);
-	HAL_UART_Transmit(&huart1, (uint8_t *) buffer, (uint16_t) strlen(buffer), 30000);
-	//store in a int array
-	acceleration[0][counter] = (int) acceleration[0];
-	acceleration[1][counter] = (int) acceleration[1];
-	acceleration[2][counter] = (int) acceleration[2];
-	counter = (counter + 1) % 100;
+	int8_t count2 = 0;
+
+	accelerationx_f[0]=0;
+	accelerationx_f[1]=0;
+
+	//Implementing a low-pass filter
+	do{
+		getXYZ();
+		accelerationx_f[(counter+1)%2] = accelerationx_f[(counter+1)%2] + Sample_X - sstatex;
+		//accelerationy_f[(counter+1)%2] = accelerationy_f[(counter+1)%2] + Sample_Y - sstatey;
+		//accelerationz_f[(counter+1)%2] = accelerationz_f[(counter+1)%2] + Sample_Z - sstatez;
+		count2++; // average represents the acceleration of
+		// an instant.
+	} while (count2!=0x40); // 64 sums of the acceleration sample
+
+	accelerationx_f[(counter+1)%2] = accelerationx_f[(counter+1)%2]>>6; // division by 64
+	accelerationy_f[(counter+1)%2] = accelerationy_f[(counter+1)%2]>>6;
+	accelerationz_f[(counter+1)%2] = accelerationz_f[(counter+1)%2]>>6;
+
+	velocityx[(counter+1)%2] = velocityx[(counter)%2] + accelerationx_f[(counter)%2] + ((accelerationx_f[(counter+1)%2] - accelerationx_f[counter%2])>>1);
+
+	counter = (counter + 1) % 64;
+	if (counter == 0) {
+		Calibrate();
+	}
 }
 /* USER CODE END 4 */
 

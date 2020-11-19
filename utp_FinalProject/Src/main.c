@@ -66,12 +66,19 @@ static void MX_USART1_UART_Init(void);
 float humidityReading = 0;
 float temperatureReading = 0;
 int16_t acceleroReading[3] = {0,0,0};
+int16_t acceleroReading_PRE[3] = {0,0,0};
 float gyroscopeReading[3] = {0,0,0};
 
 char humidityStr[20];
 char temperatureStr[20];
 char accelerometerStr[30];
 char gyroscopeStr[30];
+
+
+//define constant variables:
+uint8_t acc_y_ref = 10;
+uint8_t num_pushups = 0;
+uint8_t integral_y = 0;
 /* USER CODE END 0 */
 
 /**
@@ -110,6 +117,7 @@ int main(void)
   BSP_TSENSOR_Init();
   BSP_GYRO_Init();
   BSP_HSENSOR_Init();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -121,19 +129,28 @@ int main(void)
     /* USER CODE BEGIN 3 */
 	  humidityReading = BSP_HSENSOR_ReadHumidity();
 	  sprintf(humidityStr, "Humidity: %.2d\n", (int)humidityReading);
-	  HAL_UART_Transmit(&huart1, (uint8_t*)humidityStr, sizeof(humidityStr), 100);
+	  //HAL_UART_Transmit(&huart1, (uint8_t*)humidityStr, sizeof(humidityStr), 100);
 
 	  temperatureReading = BSP_TSENSOR_ReadTemp();
 	  sprintf(temperatureStr, "Temperature: %.2d\n", (int)temperatureReading);
-	  HAL_UART_Transmit(&huart1, (uint8_t*)temperatureStr, sizeof(temperatureStr), 100);
+	  //HAL_UART_Transmit(&huart1, (uint8_t*)temperatureStr, sizeof(temperatureStr), 100);
 
 	  BSP_ACCELERO_AccGetXYZ(acceleroReading);
 	  sprintf(accelerometerStr, "AccelerationXYZ: %.2d %.2d %.2d \n", (int)acceleroReading[0], (int)acceleroReading[1], (int)acceleroReading[2]);
 	  HAL_UART_Transmit(&huart1, (uint8_t*)accelerometerStr, sizeof(accelerometerStr), 100);
 
+
 	  BSP_GYRO_GetXYZ(gyroscopeReading);
 	  sprintf(gyroscopeStr, "Gyroscope: %.2d %.2d %.2d \n", (int)gyroscopeReading[0], (int)gyroscopeReading[1], (int)gyroscopeReading[2]);
-	  HAL_UART_Transmit(&huart1, (uint8_t*)gyroscopeStr, sizeof(gyroscopeStr), 100);
+	  //HAL_UART_Transmit(&huart1, (uint8_t*)gyroscopeStr, sizeof(gyroscopeStr), 100);
+
+	  if(((uint8_t)acceleroReading[1]-10)>3){
+		  integral_y += ((uint8_t)acceleroReading[1]-acc_y_ref);
+	  }
+
+	  num_pushups = integral_y/80;
+
+	  HAL_Delay(200);
 
 
   }

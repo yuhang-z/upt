@@ -73,7 +73,7 @@ char humidityStr[20];
 char temperatureStr[20];
 char accelerometerStr[30];
 char gyroscopeStr[30];
-
+char buffer[100] = {0};
 
 //define constant variables:
 uint8_t acc_y_ref = 10;
@@ -118,6 +118,10 @@ int main(void)
   BSP_GYRO_Init();
   BSP_HSENSOR_Init();
 
+
+  char AxBuff[60];
+  char AyBuff[20];
+  char AzBuff[20];
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -315,7 +319,20 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim2) {
+	readAccelerometer();
+}
 
+void readAccelerometer() {
+	BSP_ACCELERO_AccGetXYZ(acceleration);
+	sprintf(AxBuff, "Acc X is:%d ", (int) acceleration[0]);
+	sprintf(AyBuff, "Acc Y is:%d ", (int) acceleration[1]);
+	sprintf(AzBuff, "Acc Z is:%d  ", (int) acceleration[2]);
+	memset(buffer, 0, strlen(buffer));
+	strcat(buffer, AxBuff);
+	strcat(buffer, AyBuff);
+	strcat(buffer, AzBuff);
+}
 /* USER CODE END 4 */
 
 /**

@@ -74,6 +74,11 @@ char temperatureStr[20];
 char accelerometerStr[30];
 char gyroscopeStr[30];
 char buffer[100] = {0};
+int acceleration[3][100] = {0};
+char AxBuff[60];
+char AyBuff[20];
+char AzBuff[20];
+int counter = 0;
 
 //define constant variables:
 uint8_t acc_y_ref = 10;
@@ -118,10 +123,6 @@ int main(void)
   BSP_GYRO_Init();
   BSP_HSENSOR_Init();
 
-
-  char AxBuff[60];
-  char AyBuff[20];
-  char AzBuff[20];
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -324,7 +325,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim2) {
 }
 
 void readAccelerometer() {
+	//read
 	BSP_ACCELERO_AccGetXYZ(acceleration);
+	//for UART transmit
 	sprintf(AxBuff, "Acc X is:%d ", (int) acceleration[0]);
 	sprintf(AyBuff, "Acc Y is:%d ", (int) acceleration[1]);
 	sprintf(AzBuff, "Acc Z is:%d  ", (int) acceleration[2]);
@@ -332,6 +335,12 @@ void readAccelerometer() {
 	strcat(buffer, AxBuff);
 	strcat(buffer, AyBuff);
 	strcat(buffer, AzBuff);
+	HAL_UART_Transmit(&huart1, (uint8_t *) buffer, (uint16_t) strlen(buffer), 30000);
+	//store in a int array
+	acceleration[0][counter] = (int) acceleration[0];
+	acceleration[1][counter] = (int) acceleration[1];
+	acceleration[2][counter] = (int) acceleration[2];
+	counter = (counter + 1) % 100;
 }
 /* USER CODE END 4 */
 

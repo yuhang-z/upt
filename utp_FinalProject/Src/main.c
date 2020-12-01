@@ -118,7 +118,7 @@ int acceleration[3][100] = {0};
 char AxBuff[60];
 char AyBuff[20];
 char AzBuff[20];
-int counter = 0;
+//int counter = 0;
 
 //define constant variables:
 uint8_t acc_y_ref = 10;
@@ -128,6 +128,13 @@ uint8_t integral_y = 0;
 //for DAC & flash
 #define pi 3.14159265
 uint8_t play[22050] = {0};
+
+//for push-up counter
+int integral_velo = 0;
+int arr[100] = { };
+int calibratedz = 0;
+int16_t counter = 0;
+int16_t target = 6;
 /* USER CODE END 0 */
 
 /**
@@ -654,6 +661,19 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim2) {
 	readAccelerometer();
 }
 
+void beepOnce(){
+	beepTwice = 0;
+	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t *)soundBufferDac, 11025, DAC_ALIGN_8B_R);
+	sprintf(beepStr, "beep Once. \n");
+	HAL_UART_Transmit(&huart1, (uint8_t*)beepStr, sizeof(beepStr), 100);
+}
+
+void beepMany() {
+	beepTwice = 1;
+	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t *)soundBufferDac, 11025, DAC_ALIGN_8B_R);
+	sprintf(beepStr, "beep Once. \n");
+	HAL_UART_Transmit(&huart1, (uint8_t*)beepStr, sizeof(beepStr), 100);
+}
 
 void getXYZ() {
 	int16_t count2 = 0;
@@ -668,10 +688,23 @@ void getXYZ() {
 	Sample_X = Sample_X >> 6; // division by 64
 	Sample_Y = Sample_X >> 6;
 
-	/*
-	Sample_X = (int)acceleroReading[0];
-	Sample_Y = (int)acceleroReading[1];
-	Sample_Z = (int)acceleroReading[2];*/
+	//push up counter
+	Sample_Z = (int)acceleroReading[2];
+	if(abs(Sample_Z-1032)>100)/*otherwise in noise range*/{
+		calibratedz = Sample_Z-1032;
+		integral_velo += calibratedz/100;
+		if(abs(integral_velo/100 - arr[counter])> 4){
+			counter++;
+			arr[counter] = integral_velo/100;
+
+			if(counter == target){
+				beepMany();
+			}else{
+				beepOnce();
+			}
+
+		}
+	}
 }
 
 void calibrate() {
@@ -735,19 +768,7 @@ int isMovementDetected() {
 	return 0;
 }
 
-void beepOnce(){
-	beepTwice = 0;
-	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t *)soundBufferDac, 11025, DAC_ALIGN_8B_R);
-	sprintf(beepStr, "beep Once. \n");
-	HAL_UART_Transmit(&huart1, (uint8_t*)beepStr, sizeof(beepStr), 100);
-}
 
-void beepMany() {
-	beepTwice = 1;
-	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t *)soundBufferDac, 11025, DAC_ALIGN_8B_R);
-	sprintf(beepStr, "beep Once. \n");
-	HAL_UART_Transmit(&huart1, (uint8_t*)beepStr, sizeof(beepStr), 100);
-}
 
 void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef * hdac){
 	if (beepTwice == 1) {

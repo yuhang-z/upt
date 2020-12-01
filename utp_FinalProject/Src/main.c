@@ -84,6 +84,15 @@ int8_t is_checking = 0;
 
 int16_t velocityx[2] = {0,0};
 
+//for Integration:
+//uint8_t integral_acce = 0;
+int16_t integral_velo = 0;
+int16_t integral_disp = 0;
+int16_t restIndicator = 0;
+int16_t max = -100;
+int16_t min = 100;
+int16_t result = 0;
+int calibratedz = 0;
 
 
 float humidityReading = 0;
@@ -103,7 +112,7 @@ int counter = 0;
 
 //define constant variables:
 uint8_t acc_y_ref = 10;
-uint8_t num_pushups = 0;
+int16_t num_pushups = 0;
 uint8_t integral_y = 0;
 /* USER CODE END 0 */
 
@@ -119,8 +128,7 @@ int main(void)
 
   /* MCU Configuration--------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */  HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -367,7 +375,15 @@ static void MX_GPIO_Init(void)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim2) {
 	readAccelerometer();
 }
+int maxval(int num1, int num2)
+{
+    return (num1 > num2 ) ? num1 : num2;
+}
 
+int minval(int num1, int num2)
+{
+    return (num1 > num2 ) ? num2 : num1;
+}
 void getXYZ() {
 	int16_t count2 = 0;
 	Sample_X = 0;
@@ -384,8 +400,34 @@ void getXYZ() {
 	/*
 	Sample_X = (int)acceleroReading[0];
 	Sample_Y = (int)acceleroReading[1];
-	Sample_Z = (int)acceleroReading[2];*/
+
+	*/
+	Sample_Z = (int)acceleroReading[2];
+
+	//Integral part
+	//Settle range 100.
+	/*
+	while(integral_disp == 0 & Sample_Z-1032<-20){
+		//dead
+	}
+	*/
+	int8_t restIndicator = 0;
+	if(abs(Sample_Z-1032)>100)/*otherwise in noise range*/{
+			calibratedz = Sample_Z-1032;
+			integral_velo += calibratedz/100;
+			integral_disp += integral_velo;
+			max = maxval(max, calibratedz);
+			min = minval(min, calibratedz);
+			if(calibratedz>900) restIndicator = 0;
+			if(calibratedz<-900 && restIndicator == 0){
+				num_pushups++;
+				restIndicator = 1;
+			}
+
+		}
+
 }
+
 
 void calibrate() {
 	int16_t count1 = 0;
@@ -422,9 +464,10 @@ void readAccelerometer() {
 	accelerationx[1] = Sample_X - sstatex;
 	//velocityx[1] = velocityx[0] + accelerationx[0] + ((accelerationx[1] - accelerationx[0])>>1) ;
 
+
 	if (!is_checking && isMovementDetected()) {
 		is_checking = 1;
-		num_pushups++;
+		//num_pushups++;
 		sprintf(accelerometerStr, "Pushup detected. %d\n", num_pushups);
 		HAL_UART_Transmit(&huart1, (uint8_t*)accelerometerStr, sizeof(accelerometerStr), 100);
 	}

@@ -93,6 +93,8 @@ int16_t max = -100;
 int16_t min = 100;
 int16_t result = 0;
 int calibratedz = 0;
+int arr[100] = { };
+int16_t index = 0;
 
 
 float humidityReading = 0;
@@ -156,6 +158,7 @@ int main(void)
 	// Start the timer
 	calibrate();
 	HAL_TIM_Base_Start_IT(&htim2);
+	//int *arr = malloc(100 * sizeof(int));
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -411,8 +414,9 @@ void getXYZ() {
 		//dead
 	}
 	*/
-	int8_t restIndicator = 0;
+	//int8_t restIndicator = 0;
 	if(abs(Sample_Z-1032)>100)/*otherwise in noise range*/{
+		/*
 			calibratedz = Sample_Z-1032;
 			integral_velo += calibratedz/100;
 			integral_disp += integral_velo;
@@ -423,9 +427,14 @@ void getXYZ() {
 				num_pushups++;
 				restIndicator = 1;
 			}
-
+			*/
+		calibratedz = Sample_Z-1032;
+		integral_velo += calibratedz/100;
+		if(abs(integral_velo - arr[index])> 300){
+			index++;
+			arr[index] = integral_velo;
 		}
-
+	}
 }
 
 

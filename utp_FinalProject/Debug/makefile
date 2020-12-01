@@ -46,8 +46,8 @@ utp_FinalProject.bin \
 all: utp_FinalProject.elf secondary-outputs
 
 # Tool invocations
-utp_FinalProject.elf: $(OBJS) $(USER_OBJS) /Users/norinmura/Desktop/upt/utp_FinalProject/STM32L475VGTX_FLASH.ld
-	arm-none-eabi-gcc -o "utp_FinalProject.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/Users/norinmura/Desktop/upt/utp_FinalProject/STM32L475VGTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="utp_FinalProject.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+utp_FinalProject.elf: $(OBJS) $(USER_OBJS) /Users/norinmura/Desktop/upt-config/utp_FinalProject/STM32L475VGTX_FLASH.ld
+	arm-none-eabi-gcc -o "utp_FinalProject.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/Users/norinmura/Desktop/upt-config/utp_FinalProject/STM32L475VGTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="utp_FinalProject.map" -Wl,--gc-sections -static -L"/Users/norinmura/Desktop/upt-config/utp_FinalProject/Lib" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

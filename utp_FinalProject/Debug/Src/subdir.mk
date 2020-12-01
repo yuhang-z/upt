@@ -11,6 +11,7 @@ C_SRCS += \
 ../Src/stm32l475e_iot01_accelero.c \
 ../Src/stm32l475e_iot01_gyro.c \
 ../Src/stm32l475e_iot01_hsensor.c \
+../Src/stm32l475e_iot01_qspi.c \
 ../Src/stm32l475e_iot01_tsensor.c \
 ../Src/stm32l4xx_hal_msp.c \
 ../Src/stm32l4xx_it.c \
@@ -26,6 +27,7 @@ OBJS += \
 ./Src/stm32l475e_iot01_accelero.o \
 ./Src/stm32l475e_iot01_gyro.o \
 ./Src/stm32l475e_iot01_hsensor.o \
+./Src/stm32l475e_iot01_qspi.o \
 ./Src/stm32l475e_iot01_tsensor.o \
 ./Src/stm32l4xx_hal_msp.o \
 ./Src/stm32l4xx_it.o \
@@ -41,6 +43,7 @@ C_DEPS += \
 ./Src/stm32l475e_iot01_accelero.d \
 ./Src/stm32l475e_iot01_gyro.d \
 ./Src/stm32l475e_iot01_hsensor.d \
+./Src/stm32l475e_iot01_qspi.d \
 ./Src/stm32l475e_iot01_tsensor.d \
 ./Src/stm32l4xx_hal_msp.d \
 ./Src/stm32l4xx_it.d \
@@ -64,6 +67,8 @@ Src/stm32l475e_iot01_gyro.o: ../Src/stm32l475e_iot01_gyro.c
 	arm-none-eabi-gcc "$<" -mcpu=cortex-m4 -std=gnu11 -g3 -DUSE_HAL_DRIVER -DDEBUG -DSTM32L475xx -c -I../Inc -I../Drivers/STM32L4xx_HAL_Driver/Inc -I../Drivers/STM32L4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32L4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -MMD -MP -MF"Src/stm32l475e_iot01_gyro.d" -MT"$@" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "$@"
 Src/stm32l475e_iot01_hsensor.o: ../Src/stm32l475e_iot01_hsensor.c
 	arm-none-eabi-gcc "$<" -mcpu=cortex-m4 -std=gnu11 -g3 -DUSE_HAL_DRIVER -DDEBUG -DSTM32L475xx -c -I../Inc -I../Drivers/STM32L4xx_HAL_Driver/Inc -I../Drivers/STM32L4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32L4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -MMD -MP -MF"Src/stm32l475e_iot01_hsensor.d" -MT"$@" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "$@"
+Src/stm32l475e_iot01_qspi.o: ../Src/stm32l475e_iot01_qspi.c
+	arm-none-eabi-gcc "$<" -mcpu=cortex-m4 -std=gnu11 -g3 -DUSE_HAL_DRIVER -DDEBUG -DSTM32L475xx -c -I../Inc -I../Drivers/STM32L4xx_HAL_Driver/Inc -I../Drivers/STM32L4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32L4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -MMD -MP -MF"Src/stm32l475e_iot01_qspi.d" -MT"$@" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "$@"
 Src/stm32l475e_iot01_tsensor.o: ../Src/stm32l475e_iot01_tsensor.c
 	arm-none-eabi-gcc "$<" -mcpu=cortex-m4 -std=gnu11 -g3 -DUSE_HAL_DRIVER -DDEBUG -DSTM32L475xx -c -I../Inc -I../Drivers/STM32L4xx_HAL_Driver/Inc -I../Drivers/STM32L4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32L4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -MMD -MP -MF"Src/stm32l475e_iot01_tsensor.d" -MT"$@" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "$@"
 Src/stm32l4xx_hal_msp.o: ../Src/stm32l4xx_hal_msp.c

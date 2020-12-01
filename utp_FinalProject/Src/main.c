@@ -27,6 +27,9 @@
 #include "stm32l475e_iot01_gyro.h"
 #include "stm32l475e_iot01_accelero.h"
 #include "stm32l475e_iot01_tsensor.h"
+#define ARM_MATH_CM4
+#include "arm_math.h"
+#include "stm32l475e_iot01_qspi.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -44,9 +47,15 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+DAC_HandleTypeDef hdac1;
+DMA_HandleTypeDef hdma_dac_ch1;
+
 I2C_HandleTypeDef hi2c1;
 
+QSPI_HandleTypeDef hqspi;
+
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart1;
 
@@ -57,35 +66,52 @@ UART_HandleTypeDef huart1;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_DAC1_Init(void);
+static void MX_QUADSPI_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-float humidityReading = 0;
-float temperatureReading = 0;
 int16_t acceleroReading[3] = {0,0,0};
-int16_t acceleroReading_PRE[3] = {0,0,0};
-
-int8_t calibrated = 0;
 int16_t Sample_X;
 int16_t Sample_Y;
 int16_t Sample_Z;
 
+uint8_t soundBuffer[22050];
+uint8_t soundBufferDac[44100];
+uint8_t this_note = 0;
+uint8_t beepTwice = 0;
+
+int8_t calibrated = 0;
 int16_t sstatex;
 int16_t sstatey;
 int16_t sstatez;
 
+int16_t accelerationx[2] = {0,0};
+int16_t accelerationy[2] = {0,0};
+int16_t accelerationz[2] = {0,0};
 
+int8_t is_checking = 0;
+
+int16_t velocityx[2] = {0,0};
+int pushupAim = 20; //set the aim for pushups
+int pushupCur = 0;  //keep track of the pushup done already
+
+float humidityReading = 0;
+float temperatureReading = 0;
 float gyroscopeReading[3] = {0,0,0};
 
 char humidityStr[20];
 char temperatureStr[20];
 char accelerometerStr[30];
+char beepStr[30];
 char gyroscopeStr[30];
 char buffer[100] = {0};
 int acceleration[3][100] = {0};
@@ -98,6 +124,10 @@ int counter = 0;
 uint8_t acc_y_ref = 10;
 uint8_t num_pushups = 0;
 uint8_t integral_y = 0;
+
+//for DAC & flash
+#define pi 3.14159265
+uint8_t play[22050] = {0};
 /* USER CODE END 0 */
 
 /**
@@ -128,9 +158,13 @@ int main(void)
 
 	/* Initialize all configured peripherals */
 	MX_GPIO_Init();
+	MX_DMA_Init();
 	MX_I2C1_Init();
 	MX_USART1_UART_Init();
 	MX_TIM2_Init();
+	MX_DAC1_Init();
+	MX_QUADSPI_Init();
+	MX_TIM3_Init();
 	/* USER CODE BEGIN 2 */
 	//I2C Sensor Initialization
 	BSP_ACCELERO_Init();
@@ -139,7 +173,130 @@ int main(void)
 	BSP_HSENSOR_Init();
 
 	// Start the timer
+
+	BSP_QSPI_Init();
+
+	//generate wave
+	uint32_t note_c6[42];
+	uint32_t note_e6[33];
+	uint32_t note_g6[28];
+	uint32_t note_c7[21];
+	uint32_t note_e7[17];
+	uint32_t note_g7[14];
+
+	// Tone C6
+	for (uint8_t i=0; i<42;i++) {
+		note_c6[i] = ((arm_sin_f32(i*2*PI/42) + 1)*((0xFF + 1)/2)) / 2;
+	}
+
+	// Tone E6
+	for (uint8_t i=0; i<33;i++) {
+		note_e6[i] = ((arm_sin_f32(i*2*PI/33) + 1)*((0xFF + 1)/2)) / 2;
+	}
+
+	// Tone G6
+	for (uint8_t i=0; i<28;i++) {
+		note_g6[i] = ((arm_sin_f32(i*2*PI/28) + 1)*((0xFF + 1)/2)) / 2;
+	}
+
+	// Tone C7
+	for (uint8_t i=0; i<21;i++) {
+		note_c7[i] = ((arm_sin_f32(i*2*PI/21) + 1)*((0xFF + 1)/2)) / 2;
+	}
+
+	// Tone E7
+	for (uint8_t i=0; i<17;i++) {
+		note_e7[i] = ((arm_sin_f32(i*2*PI/17) + 1)*((0xFF + 1)/2)) / 2;
+	}
+
+	// Tone G7
+	for (uint8_t i=0; i<14;i++) {
+		note_g7[i] = ((arm_sin_f32(i*2*PI/14) + 1)*((0xFF + 1)/2)) / 2;
+	}
+
+
+	/*
+	 * Prepare the Flash - note: probably need quite a few blocks
+	 */
+	BSP_QSPI_Erase_Block(0);
+	BSP_QSPI_Erase_Block(64000);
+	BSP_QSPI_Erase_Block(128000);
+
+
+
+	/*
+	 * Write the notes into flash
+	 */
+
+	// C6
+	for(int i=0; i<526; i++){
+		for(int j=0; j<42; j++){
+			soundBuffer[42*i+j] = note_c6[j] % 256;
+		}
+	}
+	BSP_QSPI_Write((uint8_t*)&soundBuffer[0], 11025*0, 22050);
+
+
+	// E6
+	for(int i=0; i<668; i++){
+		for(int j=0; j<33; j++){
+			soundBuffer[i*33+j] = note_e6[j] % 256;
+		}
+	}
+	BSP_QSPI_Write((uint8_t*)&soundBuffer[0], 22050*1, 22050);
+
+	// G6
+	for(int i=0; i<786; i++){
+		for(int j=0; j<28; j++){
+			soundBuffer[i*28+j] = note_g6[j] % 256;
+		}
+	}
+	BSP_QSPI_Write((uint8_t*)&soundBuffer[0], 22050*2, 22050);
+
+
+
+	// C7
+	for(int i=0; i<1050; i++){
+		for(int j=0; j<21; j++){
+			soundBuffer[i*21+j] = note_c7[j] % 256;
+		}
+	}
+	BSP_QSPI_Write((uint8_t*)&soundBuffer[0], 22050*3, 22050);
+
+
+	// E7
+	for(int i=0; i<1296; i++){
+		for(int j=0; j<17; j++){
+			soundBuffer[i*17+j] = note_e7[j] % 256;
+		}
+	}
+	BSP_QSPI_Write((uint8_t*)&soundBuffer[0], 22050*4, 22050);
+
+
+	// G7
+	for(int i=0; i<1574; i++){
+		for(int j=0; j<14; j++){
+			soundBuffer[i*14+j] = note_g7[j] % 256;
+		}
+	}
+	BSP_QSPI_Write((uint8_t*)&soundBuffer[0], 22050*5, 22050);
+
+
+
+	// Prepare to play the first two notes
+	BSP_QSPI_Read((uint8_t *)&soundBufferDac[0], 0, 22050);
+	BSP_QSPI_Read((uint8_t *)&soundBufferDac[22050], 22050, 22050);
+
+	// Calibrate the accelerator
+	calibrate();
+
+	// Beep twice to indicate it's ready
+	beepTwice = 1;
+	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t *)soundBufferDac, 11025, DAC_ALIGN_8B_R);
+
+	// Start the measurement
 	HAL_TIM_Base_Start_IT(&htim2);
+
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
@@ -149,35 +306,6 @@ int main(void)
 		/* USER CODE END WHILE */
 
 		/* USER CODE BEGIN 3 */
-		/* Just keep it here */
-		/*
-	  humidityReading = BSP_HSENSOR_ReadHumidity();
-	  sprintf(humidityStr, "Humidity: %.2d\n", (int)humidityReading);
-	  //HAL_UART_Transmit(&huart1, (uint8_t*)humidityStr, sizeof(humidityStr), 100);
-
-	  temperatureReading = BSP_TSENSOR_ReadTemp();
-	  sprintf(temperatureStr, "Temperature: %.2d\n", (int)temperatureReading);
-	  //HAL_UART_Transmit(&huart1, (uint8_t*)temperatureStr, sizeof(temperatureStr), 100);
-
-	  BSP_ACCELERO_AccGetXYZ(acceleroReading);
-	  sprintf(accelerometerStr, "AccelerationXYZ: %.2d %.2d %.2d \n", (int)acceleroReading[0], (int)acceleroReading[1], (int)acceleroReading[2]);
-	  HAL_UART_Transmit(&huart1, (uint8_t*)accelerometerStr, sizeof(accelerometerStr), 100);
-
-
-	  BSP_GYRO_GetXYZ(gyroscopeReading);
-	  sprintf(gyroscopeStr, "Gyroscope: %.2d %.2d %.2d \n", (int)gyroscopeReading[0], (int)gyroscopeReading[1], (int)gyroscopeReading[2]);
-	  //HAL_UART_Transmit(&huart1, (uint8_t*)gyroscopeStr, sizeof(gyroscopeStr), 100);
-
-		 */
-		if(((uint8_t)acceleroReading[1]-10)>3){
-			integral_y += ((uint8_t)acceleroReading[1]-acc_y_ref);
-		}
-
-		num_pushups = integral_y/80;
-
-		HAL_Delay(200);
-
-
 	}
 	/* USER CODE END 3 */
 }
@@ -239,6 +367,47 @@ void SystemClock_Config(void)
 }
 
 /**
+ * @brief DAC1 Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_DAC1_Init(void)
+{
+
+	/* USER CODE BEGIN DAC1_Init 0 */
+
+	/* USER CODE END DAC1_Init 0 */
+
+	DAC_ChannelConfTypeDef sConfig = {0};
+
+	/* USER CODE BEGIN DAC1_Init 1 */
+
+	/* USER CODE END DAC1_Init 1 */
+	/** DAC Initialization
+	 */
+	hdac1.Instance = DAC1;
+	if (HAL_DAC_Init(&hdac1) != HAL_OK)
+	{
+		Error_Handler();
+	}
+	/** DAC channel OUT1 config
+	 */
+	sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
+	sConfig.DAC_Trigger = DAC_TRIGGER_T2_TRGO;
+	sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
+	sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_DISABLE;
+	sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
+	if (HAL_DAC_ConfigChannel(&hdac1, &sConfig, DAC_CHANNEL_1) != HAL_OK)
+	{
+		Error_Handler();
+	}
+	/* USER CODE BEGIN DAC1_Init 2 */
+
+	/* USER CODE END DAC1_Init 2 */
+
+}
+
+/**
  * @brief I2C1 Initialization Function
  * @param None
  * @retval None
@@ -285,6 +454,39 @@ static void MX_I2C1_Init(void)
 }
 
 /**
+ * @brief QUADSPI Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_QUADSPI_Init(void)
+{
+
+	/* USER CODE BEGIN QUADSPI_Init 0 */
+
+	/* USER CODE END QUADSPI_Init 0 */
+
+	/* USER CODE BEGIN QUADSPI_Init 1 */
+
+	/* USER CODE END QUADSPI_Init 1 */
+	/* QUADSPI parameter configuration*/
+	hqspi.Instance = QUADSPI;
+	hqspi.Init.ClockPrescaler = 255;
+	hqspi.Init.FifoThreshold = 1;
+	hqspi.Init.SampleShifting = QSPI_SAMPLE_SHIFTING_NONE;
+	hqspi.Init.FlashSize = 1;
+	hqspi.Init.ChipSelectHighTime = QSPI_CS_HIGH_TIME_1_CYCLE;
+	hqspi.Init.ClockMode = QSPI_CLOCK_MODE_0;
+	if (HAL_QSPI_Init(&hqspi) != HAL_OK)
+	{
+		Error_Handler();
+	}
+	/* USER CODE BEGIN QUADSPI_Init 2 */
+
+	/* USER CODE END QUADSPI_Init 2 */
+
+}
+
+/**
  * @brief TIM2 Initialization Function
  * @param None
  * @retval None
@@ -303,9 +505,9 @@ static void MX_TIM2_Init(void)
 
 	/* USER CODE END TIM2_Init 1 */
 	htim2.Instance = TIM2;
-	htim2.Init.Prescaler = 40000;
+	htim2.Init.Prescaler = 0;
 	htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim2.Init.Period = 100;
+	htim2.Init.Period = 1814;
 	htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
 	if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -317,7 +519,7 @@ static void MX_TIM2_Init(void)
 	{
 		Error_Handler();
 	}
-	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+	sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
 	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
 	if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
 	{
@@ -326,6 +528,51 @@ static void MX_TIM2_Init(void)
 	/* USER CODE BEGIN TIM2_Init 2 */
 
 	/* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
+ * @brief TIM3 Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_TIM3_Init(void)
+{
+
+	/* USER CODE BEGIN TIM3_Init 0 */
+
+	/* USER CODE END TIM3_Init 0 */
+
+	TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+	TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+	/* USER CODE BEGIN TIM3_Init 1 */
+
+	/* USER CODE END TIM3_Init 1 */
+	htim3.Instance = TIM3;
+	htim3.Init.Prescaler = 0;
+	htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+	htim3.Init.Period = 7256;
+	htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+	htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+	if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+	{
+		Error_Handler();
+	}
+	sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+	if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+	{
+		Error_Handler();
+	}
+	sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+	if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+	{
+		Error_Handler();
+	}
+	/* USER CODE BEGIN TIM3_Init 2 */
+
+	/* USER CODE END TIM3_Init 2 */
 
 }
 
@@ -365,6 +612,22 @@ static void MX_USART1_UART_Init(void)
 }
 
 /**
+ * Enable DMA controller clock
+ */
+static void MX_DMA_Init(void)
+{
+
+	/* DMA controller clock enable */
+	__HAL_RCC_DMA1_CLK_ENABLE();
+
+	/* DMA interrupt init */
+	/* DMA1_Channel3_IRQn interrupt configuration */
+	HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
+	HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
+
+}
+
+/**
  * @brief GPIO Initialization Function
  * @param None
  * @retval None
@@ -374,6 +637,8 @@ static void MX_GPIO_Init(void)
 	GPIO_InitTypeDef GPIO_InitStruct = {0};
 
 	/* GPIO Ports Clock Enable */
+	__HAL_RCC_GPIOA_CLK_ENABLE();
+	__HAL_RCC_GPIOE_CLK_ENABLE();
 	__HAL_RCC_GPIOB_CLK_ENABLE();
 
 	/*Configure GPIO pin : LED_Pin */
@@ -389,23 +654,121 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim2) {
 	readAccelerometer();
 }
 
+
+void getXYZ() {
+	int16_t count2 = 0;
+	Sample_X = 0;
+	do{
+		BSP_ACCELERO_AccGetXYZ(acceleroReading);
+		Sample_X = Sample_X + (int)acceleroReading[0];
+		count2++; // average represents the acceleration of
+		// an instant.
+	} while (count2!=0x40); // 64 sums of the acceleration sample
+
+	Sample_X = Sample_X >> 6; // division by 64
+	Sample_Y = Sample_X >> 6;
+
+	/*
+	Sample_X = (int)acceleroReading[0];
+	Sample_Y = (int)acceleroReading[1];
+	Sample_Z = (int)acceleroReading[2];*/
+}
+
+void calibrate() {
+	int16_t count1 = 0;
+
+	HAL_Delay(3000);
+
+	do {
+		getXYZ();
+		sstatex = sstatex + Sample_X; // Accumulate Samples
+		sstatey = sstatey + Sample_Y;
+		sstatez = sstatez + Sample_Z;
+		count1++;
+	} while (count1 != 0x0400); // 1024 times
+
+	sstatex = sstatex>>10; // division between 1024
+	sstatey = sstatey>>10;
+	sstatez = sstatez>>10;
+
+	calibrated = 1;
+
+	sprintf(accelerometerStr, "Calibration completed. \n");
+	HAL_UART_Transmit(&huart1, (uint8_t*)accelerometerStr, sizeof(accelerometerStr), 100);
+}
+
 void readAccelerometer() {
-	//read
-	BSP_ACCELERO_AccGetXYZ(acceleration);
-	//for UART transmit
-	sprintf(AxBuff, "Acc X is:%d ", (int) acceleration[0]);
-	sprintf(AyBuff, "Acc Y is:%d ", (int) acceleration[1]);
-	sprintf(AzBuff, "Acc Z is:%d  ", (int) acceleration[2]);
-	memset(buffer, 0, strlen(buffer));
-	strcat(buffer, AxBuff);
-	strcat(buffer, AyBuff);
-	strcat(buffer, AzBuff);
-	HAL_UART_Transmit(&huart1, (uint8_t *) buffer, (uint16_t) strlen(buffer), 30000);
-	//store in a int array
-	acceleration[0][counter] = (int) acceleration[0];
-	acceleration[1][counter] = (int) acceleration[1];
-	acceleration[2][counter] = (int) acceleration[2];
-	counter = (counter + 1) % 100;
+
+	// get one
+	getXYZ();
+	accelerationx[0] = Sample_X - sstatex;
+	//velocityx[0] = velocityx[1] + accelerationx[1] + ((accelerationx[0] - accelerationx[1])>>1) ;
+
+	// get one
+	getXYZ();
+	accelerationx[1] = Sample_X - sstatex;
+	//velocityx[1] = velocityx[0] + accelerationx[0] + ((accelerationx[1] - accelerationx[0])>>1) ;
+
+	if (!is_checking && isMovementDetected()) {
+		is_checking = 1;
+		num_pushups++;
+		sprintf(accelerometerStr, "Pushup detected. %d\n", num_pushups);
+		HAL_UART_Transmit(&huart1, (uint8_t*)accelerometerStr, sizeof(accelerometerStr), 100);
+		pushupCur++;
+		if(pushupCur < pushupAim){
+			beepOnce();
+		}else{
+			beepMany();
+		}
+	}
+	is_checking = 0;
+}
+
+int isMovementDetected() {
+	int16_t accelerationx_f = (accelerationx[0] + accelerationx[1]) / 2;
+	if (abs(accelerationx_f) > 100) {
+		sprintf(accelerometerStr, "Acceleration %d\n", accelerationx_f);
+		HAL_UART_Transmit(&huart1, (uint8_t*)accelerometerStr, sizeof(accelerometerStr), 100);
+		return 1;
+	}
+
+	return 0;
+}
+
+void beepOnce(){
+	beepTwice = 0;
+	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t *)soundBufferDac, 11025, DAC_ALIGN_8B_R);
+	sprintf(beepStr, "beep Once. \n");
+	HAL_UART_Transmit(&huart1, (uint8_t*)beepStr, sizeof(beepStr), 100);
+}
+
+void beepMany() {
+	beepTwice = 1;
+	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t *)soundBufferDac, 11025, DAC_ALIGN_8B_R);
+	sprintf(beepStr, "beep Once. \n");
+	HAL_UART_Transmit(&huart1, (uint8_t*)beepStr, sizeof(beepStr), 100);
+}
+
+void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef * hdac){
+	if (beepTwice == 1) {
+		if (this_note == 0) {
+			BSP_QSPI_Read((uint8_t *)&soundBufferDac[0], 22050*2, 22050);
+			BSP_QSPI_Read((uint8_t *)&soundBufferDac[22050], 22050*3, 22050);
+			HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t *)soundBufferDac, 11025, DAC_ALIGN_8B_R);
+			beepTwice = 0;
+		} else {
+			BSP_QSPI_Read((uint8_t *)&soundBufferDac[0], 22050*0, 22050);
+			BSP_QSPI_Read((uint8_t *)&soundBufferDac[22050], 22050*1, 22050);
+		}
+		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);	// toggle LED
+
+		if (this_note < 1) {
+			this_note++;
+		} else {
+			this_note = 0;
+		}
+	}
+
 }
 /* USER CODE END 4 */
 

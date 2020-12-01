@@ -86,7 +86,7 @@ int16_t velocityx[2] = {0,0};
 
 //for Integration:
 //uint8_t integral_acce = 0;
-int16_t integral_velo = 0;
+int integral_velo = 0;
 int16_t integral_disp = 0;
 int16_t restIndicator = 0;
 int16_t max = -100;
@@ -430,9 +430,9 @@ void getXYZ() {
 			*/
 		calibratedz = Sample_Z-1032;
 		integral_velo += calibratedz/100;
-		if(abs(integral_velo - arr[index])> 300){
+		if(abs(integral_velo/100 - arr[index])> 4){
 			index++;
-			arr[index] = integral_velo;
+			arr[index] = integral_velo/100;
 		}
 	}
 }
